@@ -413,9 +413,12 @@ th{white-space:nowrap;}
           <option value="cash">Cash</option><option value="bank">Bank In</option><option value="cheque">Cheque</option>
         </select></div>
       <div class="mb-2"><label class="form-label">Ref / Cheque No</label><input type="text" class="form-control" id="cr-ref"></div>
-      <div class="mb-2"><label class="form-label">Invoice No (Link)</label>
-        <select class="form-select" id="cr-inv"><option value="">-- Not linked --</option></select></div>
-      <div class="mb-3"><label class="form-label">Amount (RM) *</label><input type="number" class="form-control" id="cr-amt" step="0.01" placeholder="0.00" oninput="autofillCrAmt()"></div>
+      <div class="mb-2"><label class="form-label">Link Invoice(s) <small class="text-muted">(tick to select, can pick multiple)</small></label>
+        <input type="text" id="cr-inv-search" class="form-control form-control-sm mb-1" placeholder="Search customer..." oninput="crFilterList()">
+        <div id="cr-inv-list" style="max-height:140px;overflow-y:auto;border:1px solid #ced4da;border-radius:6px;padding:6px;background:#fff;font-size:.82rem;"></div>
+        <div class="mt-1"><button type="button" class="btn btn-xs btn-outline-secondary" onclick="crAutoFillFromInv()"><i class="bi bi-calculator"></i> Auto-sum selected</button></div>
+      </div>
+      <div class="mb-3"><label class="form-label">Amount (RM) *</label><input type="number" class="form-control" id="cr-amt" step="0.01" placeholder="0.00"></div>
       <div class="d-flex gap-2">
         <button class="btn btn-navy flex-fill" onclick="saveCashReceived()"><i class="bi bi-save"></i> Save</button>
         <button class="btn btn-secondary" onclick="clearCrForm()">Clear</button>
@@ -880,10 +883,10 @@ function refreshDropdowns(){
   var custs=[]; custMaster.forEach(function(r){if(r.name&&!custs.includes(r.name))custs.push(r.name);}); gD('v2_sales').forEach(function(r){if(r.customer&&!custs.includes(r.customer))custs.push(r.customer);});
   var custOpts=custs.map(function(c){return '<option value="'+ea(c)+'">'+esc(c)+'</option>';}).join('');
   ['lst-custs','lst-custs2'].forEach(function(id){si(id,custOpts);});
-  /* Unpaid invoices for cash received */
-  var unpaid=gD('v2_sales').filter(function(r){return r.status==='unpaid';});
-  var invOpts='<option value="">-- Not Linked --</option>'+unpaid.map(function(r){return '<option value="'+ea(r.id)+'">'+esc(r.invNo)+' — '+esc(r.customer)+' (RM '+fmt(r.total)+')</option>';}).join('');
-  si('cr-inv',invOpts);
+  /* Unpaid invoices for cash received — checkbox list, sorted by customer name */
+  window._crUnpaid=gD('v2_sales').filter(function(r){return r.status==='unpaid';})
+    .sort(function(a,b){return (a.customer||'').localeCompare(b.customer||'');});
+  crRenderInvList();
 }
 
 /* ============================================================
@@ -1009,7 +1012,7 @@ function loadSales(){
     var isOverdue=r.status==='unpaid'&&r.dueDate&&r.dueDate<today_;
     var badge=r.status==='paid'?'<span class="badge-paid">PAID</span>':(isOverdue?'<span class="badge-overdue">OVERDUE</span>':'<span class="badge-unpaid">UNPAID</span>');
     return '<tr>'
-      +'<td><strong>'+esc(r.invNo)+'</strong></td><td>'+esc(fmtDate(r.date))+'</td><td>'+esc(r.customer)+'</td><td>'+esc(cat.name||'-')+'</td>'
+      +'<td><strong>'+esc(r.invNo)+'</strong></td><td>'+esc(fmtDate(r.date))+'</td><td>'+esc(proper(r.customer||''))+'</td><td>'+esc(cat.name||'-')+'</td>'
       +'<td>'+esc(r.terms==='cod'?'COD':r.terms+' Days')+'</td>'
       +'<td '+(isOverdue?'class="text-danger fw-bold"':'')+'>'+esc(fmtDate(r.dueDate))+'</td>'
       +'<td class="num">'+fmt(r.total)+'</td><td>'+badge+'</td>'
@@ -1158,30 +1161,77 @@ function exportPurXLSX(){
 /* ============================================================
    CASH RECEIVED
    ============================================================ */
-function autofillCrAmt(){
-  var invId=gv('cr-inv');if(!invId)return;
-  var sale=gD('v2_sales').find(function(r){return r.id===invId;});
-  if(sale&&!gv('cr-amt'))sv('cr-amt',fmt(sale.total));
-  if(sale&&!gv('cr-from'))sv('cr-from',sale.customer);
+function crRenderInvList(filter){
+  var el=document.getElementById('cr-inv-list');if(!el)return;
+  var list=window._crUnpaid||[];
+  var q=(filter||'').toLowerCase().trim();
+  if(q)list=list.filter(function(r){return (r.customer||'').toLowerCase().indexOf(q)>=0||(r.invNo||'').toLowerCase().indexOf(q)>=0;});
+  if(!list.length){el.innerHTML='<span class="text-muted">'+(q?'No match':'No unpaid invoices')+'</span>';return;}
+  var checked=getCrCheckedIds();
+  el.innerHTML=list.map(function(r){
+    var chk=checked.indexOf(r.id)>=0?'checked':'';
+    return '<label class="d-flex align-items-center gap-2 mb-1" style="cursor:pointer;">'
+      +'<input type="checkbox" class="cr-inv-chk" value="'+ea(r.id)+'" '+chk+' onchange="crUpdateFromSel()">'
+      +'<span><strong>'+esc(r.invNo)+'</strong> — '+esc(proper(r.customer))+' <span class="text-muted">(RM '+fmt(r.total)+')</span></span>'
+      +'</label>';
+  }).join('');
 }
-function clearCrForm(){sv('cr-edit-id','');sv('cr-date',today());sv('cr-from','');sv('cr-mode','cash');sv('cr-ref','');sv('cr-inv','');sv('cr-amt','');}
+function crFilterList(){
+  var q=document.getElementById('cr-inv-search');
+  crRenderInvList(q?q.value:'');
+}
+function getCrCheckedIds(){
+  var boxes=document.querySelectorAll('.cr-inv-chk:checked');
+  return Array.prototype.map.call(boxes,function(b){return b.value;});
+}
+function crUpdateFromSel(){
+  /* auto-fill customer from first checked invoice */
+  var ids=getCrCheckedIds();
+  if(!ids.length)return;
+  var sales=gD('v2_sales');
+  var first=sales.find(function(r){return r.id===ids[0];});
+  if(first&&!gv('cr-from'))sv('cr-from',first.customer);
+}
+function crAutoFillFromInv(){
+  var ids=getCrCheckedIds();if(!ids.length)return;
+  var sales=gD('v2_sales');
+  var total=ids.reduce(function(a,id){
+    var s=sales.find(function(r){return r.id===id;});return a+(s?s.total:0);
+  },0);
+  sv('cr-amt',total.toFixed(2));
+  if(!gv('cr-from')){var first=sales.find(function(r){return r.id===ids[0];});if(first)sv('cr-from',first.customer);}
+}
+function clearCrForm(){
+  sv('cr-edit-id','');sv('cr-date',today());sv('cr-from','');sv('cr-mode','cash');sv('cr-ref','');sv('cr-amt','');
+  var s=document.getElementById('cr-inv-search');if(s)s.value='';
+  crRenderInvList();
+}
 function editCr(id){
   var r=gD('v2_cashreceived').find(function(x){return x.id===id;});if(!r)return;
-  sv('cr-edit-id',r.id);sv('cr-date',r.date);sv('cr-from',r.from||'');sv('cr-mode',r.mode||'cash');sv('cr-ref',r.ref||'');sv('cr-inv',r.invoiceId||'');sv('cr-amt',r.amount||'');
+  sv('cr-edit-id',r.id);sv('cr-date',r.date);sv('cr-from',r.from||'');sv('cr-mode',r.mode||'cash');sv('cr-ref',r.ref||'');sv('cr-amt',r.amount||'');
+  /* re-render list then re-check previously linked invoices */
+  var linked=r.invoiceIds||( r.invoiceId?[r.invoiceId]:[] );
+  var s=document.getElementById('cr-inv-search');if(s)s.value='';
+  crRenderInvList();
+  linked.forEach(function(id){var b=document.querySelector('.cr-inv-chk[value="'+id+'"]');if(b)b.checked=true;});
   document.getElementById('cr-date').scrollIntoView({behavior:'smooth'});
 }
 function saveCashReceived(){
   var date=gv('cr-date'),from=proper(gv('cr-from').trim()),amt=tn(gv('cr-amt'));
   if(!date||!from||!amt){alert('Date, From, and Amount required.');return;}
-  var invId=gv('cr-inv');
+  var invIds=getCrCheckedIds();
   var editId=gv('cr-edit-id');
   var arr=gD('v2_cashreceived');var idx=editId?arr.findIndex(function(r){return r.id===editId;}):-1;
-  var rec={id:editId||uid(),date:date,from:from,mode:gv('cr-mode'),ref:gv('cr-ref'),amount:amt,invoiceId:invId};
+  var rec={id:editId||uid(),date:date,from:from,mode:gv('cr-mode'),ref:gv('cr-ref'),amount:amt,invoiceIds:invIds,invoiceId:invIds[0]||''};
   if(idx>=0)arr[idx]=rec;else arr.push(rec);sD('v2_cashreceived',arr);
-  /* Auto mark invoice as paid if linked */
-  if(invId){
-    var sales=gD('v2_sales');var idx=sales.findIndex(function(r){return r.id===invId;});
-    if(idx>=0){sales[idx].status='paid';sales[idx].paidDate=date;sales[idx].paidAmount=amt;sD('v2_sales',sales);}
+  /* Auto mark linked invoices as paid */
+  if(invIds.length){
+    var sales=gD('v2_sales');
+    invIds.forEach(function(invId){
+      var si2=sales.findIndex(function(r){return r.id===invId;});
+      if(si2>=0){sales[si2].status='paid';sales[si2].paidDate=date;sales[si2].paidAmount=amt;}
+    });
+    sD('v2_sales',sales);
   }
   clearCrForm();
   loadCr();loadSales();refreshDropdowns();
@@ -1190,15 +1240,23 @@ function loadCr(){
   var arr=gYCr().sort(function(a,b){return a.date>b.date?1:-1;});
   var total=0;
   si('cr-yr-lbl',CY+(CM>0?' / M'+CM:''));
+  var sales=gD('v2_sales');
   si('tbody-cr',arr.map(function(r){
     total+=r.amount;
-    return '<tr><td>'+esc(fmtDate(r.date))+'</td><td>'+esc(r.from)+'</td><td>'+esc(r.mode)+'</td><td>'+esc(r.ref)+'</td><td>'+esc(r.invoiceId?'Yes':'-')+'</td><td class="num">'+fmt(r.amount)+'</td><td class="no-print"><button class="btn btn-xs btn-outline-danger" onclick="editCr(\''+r.id+'\')" title="Edit"><i class="bi bi-pencil"></i></button> <button class="btn btn-xs btn-outline-danger" onclick="delRec(\'v2_cashreceived\',\''+r.id+'\',loadCr)"><i class="bi bi-trash"></i></button></td></tr>';
+    var linked=r.invoiceIds||( r.invoiceId?[r.invoiceId]:[] );
+    var invLabel=linked.length?linked.map(function(id){var s=sales.find(function(x){return x.id===id;});return s?s.invNo:id;}).join(', '):'-';
+    return '<tr><td>'+esc(fmtDate(r.date))+'</td><td>'+esc(proper(r.from||''))+'</td><td>'+esc(r.mode)+'</td><td>'+esc(r.ref)+'</td><td>'+esc(invLabel)+'</td><td class="num">'+fmt(r.amount)+'</td><td class="no-print"><button class="btn btn-xs btn-outline-danger" onclick="editCr(\''+r.id+'\')" title="Edit"><i class="bi bi-pencil"></i></button> <button class="btn btn-xs btn-outline-danger" onclick="delRec(\'v2_cashreceived\',\''+r.id+'\',loadCr)"><i class="bi bi-trash"></i></button></td></tr>';
   }).join(''));
   si('cr-total','RM '+fmt(total));
 }
 function exportCrXLSX(){
-  var rows=[['Date','From','Mode','Ref','Linked Invoice','Amount']];
-  gYCr().forEach(function(r){rows.push([r.date,r.from,r.mode,r.ref,r.invoiceId?'Yes':'-',r.amount]);});
+  var rows=[['Date','From','Mode','Ref','Linked Invoice(s)','Amount']];
+  var sales=gD('v2_sales');
+  gYCr().forEach(function(r){
+    var linked=r.invoiceIds||(r.invoiceId?[r.invoiceId]:[]);
+    var invLabel=linked.map(function(id){var s=sales.find(function(x){return x.id===id;});return s?s.invNo:id;}).join(', ')||'-';
+    rows.push([r.date,r.from,r.mode,r.ref,invLabel,r.amount]);
+  });
   toXLSX(rows,'CashReceived','CashReceived_'+CY+'.xlsx');
 }
 
@@ -1279,7 +1337,7 @@ function loadOBList(){
   var obs=gD('v2_debtor_ob');
   if(!obs.length){si('ob-list','<div class="text-muted p-2">No opening balances set.</div>');return;}
   si('ob-list','<table class="table table-sm mb-0"><thead><tr><th>Customer</th><th>As At</th><th class="num">Amount (RM)</th><th></th></tr></thead><tbody>'
-    +obs.map(function(r){return '<tr><td>'+esc(r.customer)+'</td><td>'+esc(fmtDate(r.date))+'</td><td class="num">'+fmt(r.amount)+'</td>'
+    +obs.map(function(r){return '<tr><td>'+esc(proper(r.customer||''))+'</td><td>'+esc(fmtDate(r.date))+'</td><td class="num">'+fmt(r.amount)+'</td>'
       +'<td><button class="btn btn-xs btn-danger" onclick="deleteOB(\''+ea(r.customer)+'\')"><i class="bi bi-trash"></i></button></td></tr>';}).join('')
     +'</tbody></table>');
 }
@@ -1403,12 +1461,12 @@ function loadDebtorSummary(){
     +summaryRows.map(function(r,i){
       return '<tr style="cursor:pointer" onclick="showDebtorDetail(window._soaCusts['+i+'])">'
         +'<td><strong>'+esc(r.cust)+'</strong></td>'
-        +'<td class="num">'+(r.ag.a30?'<span class="text-warning">'+fmt(r.ag.a30)+'</span>':'—')+'</td>'
-        +'<td class="num">'+(r.ag.a60?'<span class="text-warning">'+fmt(r.ag.a60)+'</span>':'—')+'</td>'
+        +'<td class="num">'+(r.ag.a30?'<span class="fw-bold" style="color:#5a3e00;">'+fmt(r.ag.a30)+'</span>':'—')+'</td>'
+        +'<td class="num">'+(r.ag.a60?'<span class="fw-bold" style="color:#5a3e00;">'+fmt(r.ag.a60)+'</span>':'—')+'</td>'
         +'<td class="num">'+(r.ag.a90?'<span class="text-danger">'+fmt(r.ag.a90)+'</span>':'—')+'</td>'
         +'<td class="num">'+(r.ag.a120?'<span class="text-danger">'+fmt(r.ag.a120)+'</span>':'—')+'</td>'
         +'<td class="num">'+(r.ag.a120p?'<span class="text-danger fw-bold">'+fmt(r.ag.a120p)+'</span>':'—')+'</td>'
-        +'<td class="num"><strong class="'+(r.finalBal>0?'text-warning':'text-success')+'">RM '+fmt(r.finalBal)+'</strong></td>'
+        +'<td class="num"><strong style="color:'+(r.finalBal>0?'#2c2c2c':'#155724')+'">RM '+fmt(r.finalBal)+'</strong></td>'
         +'<td><button class="btn btn-xs btn-pdf" onclick="event.stopPropagation();generateSOA(window._soaCusts['+i+'])"><i class="bi bi-file-pdf"></i> SOA</button></td>'
         +'</tr>';
     }).join('')
@@ -1420,7 +1478,7 @@ function loadDebtorSummary(){
     +'<td class="num">'+(tot90?fmt(tot90):'—')+'</td>'
     +'<td class="num">'+(tot120?fmt(tot120):'—')+'</td>'
     +'<td class="num text-danger">'+(tot120p?fmt(tot120p):'—')+'</td>'
-    +'<td class="num text-warning">RM '+fmt(totBal)+'</td>'
+    +'<td class="num fw-bold" style="color:#2c2c2c;">RM '+fmt(totBal)+'</td>'
     +'<td></td>'
     +'</tr></tfoot>'
     +'</table></div></div></div>';
@@ -1445,7 +1503,7 @@ function loadDebtorDetail(cust){
     +'<div class="card">'
     +'<div class="card-header d-flex justify-content-between align-items-center">'
     +'<strong><i class="bi bi-person-lines-fill"></i> '+esc(cust)+'</strong>'
-    +'<span>Balance: <strong class="'+(finalBal>0?'text-warning':'text-success')+'">RM '+fmt(finalBal)+'</strong></span>'
+    +'<span>Balance: <strong style="color:'+(finalBal>0?'#2c2c2c':'#155724')+'">RM '+fmt(finalBal)+'</strong></span>'
     +'</div>'
     +'<div class="card-body p-0"><div style="overflow-x:auto;"><table class="table table-sm mb-0">'
     +'<thead><tr><th style="min-width:90px">Date</th><th>Description</th>'
@@ -2565,7 +2623,7 @@ function loadDashboard(){
   );
   var yr=document.getElementById('dash-yr');if(yr)yr.textContent=''+CY;
   // Unpaid list
-  var upList=unpaid.slice(0,8).map(function(r){return '<div class="d-flex justify-content-between py-1 border-bottom"><span>'+esc(r.customer)+' <small class="text-muted">'+esc(r.invNo)+'</small></span><span class="fw-bold">RM '+fmt(r.total-(r.paidAmount||0))+'</span></div>';}).join('');
+  var upList=unpaid.slice(0,8).map(function(r){return '<div class="d-flex justify-content-between py-1 border-bottom"><span>'+esc(proper(r.customer||''))+' <small class="text-muted">'+esc(r.invNo)+'</small></span><span class="fw-bold">RM '+fmt(r.total-(r.paidAmount||0))+'</span></div>';}).join('');
   si('dash-unpaid-list',upList||'<div class="text-muted">All invoices paid!</div>');
   // Monthly chart
   var months=Array.from({length:12},function(_,i){return i+1;});
