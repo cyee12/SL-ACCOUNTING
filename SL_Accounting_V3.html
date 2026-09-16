@@ -77,6 +77,25 @@ th{white-space:nowrap;}
 </style>
 </head>
 <body>
+<!-- LOGIN OVERLAY -->
+<div id="login-overlay" style="position:fixed;inset:0;background:linear-gradient(135deg,#0f1f3d 0%,#1a3a5c 60%,#0d2137 100%);z-index:9999;display:flex;align-items:center;justify-content:center;">
+  <div style="background:rgba(255,255,255,0.07);backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,0.15);border-radius:18px;padding:44px 40px 36px;width:340px;text-align:center;box-shadow:0 8px 40px rgba(0,0,0,0.5);">
+    <div style="font-size:2.8rem;margin-bottom:12px;">🏢</div>
+    <div style="color:#fff;font-size:1.25rem;font-weight:700;margin-bottom:4px;">SL Office Supplies</div>
+    <div style="color:rgba(255,255,255,0.5);font-size:.8rem;margin-bottom:28px;">Accounting System V3</div>
+    <input id="login-user" type="text" placeholder="Username" autocomplete="off"
+      style="width:100%;padding:11px 14px;border-radius:8px;border:1px solid rgba(255,255,255,0.2);background:rgba(255,255,255,0.1);color:#fff;font-size:.9rem;margin-bottom:12px;outline:none;"
+      onkeydown="if(event.key==='Enter')document.getElementById('login-pass').focus()">
+    <input id="login-pass" type="password" placeholder="Password" autocomplete="off"
+      style="width:100%;padding:11px 14px;border-radius:8px;border:1px solid rgba(255,255,255,0.2);background:rgba(255,255,255,0.1);color:#fff;font-size:.9rem;margin-bottom:8px;outline:none;"
+      onkeydown="if(event.key==='Enter')doLogin()">
+    <div id="login-err" style="color:#ff6b6b;font-size:.78rem;min-height:20px;margin-bottom:8px;"></div>
+    <button onclick="doLogin()" style="width:100%;padding:12px;border-radius:8px;border:none;background:#4a90d9;color:#fff;font-size:.95rem;font-weight:700;cursor:pointer;transition:.15s;" onmouseover="this.style.background='#3070b8'" onmouseout="this.style.background='#4a90d9'">
+      <i class="bi bi-unlock-fill"></i> Login
+    </button>
+    <div style="color:rgba(255,255,255,0.25);font-size:.7rem;margin-top:20px;">SL Accounting &copy; 2026</div>
+  </div>
+</div>
 <!-- TOPBAR -->
 <div id="topbar">
   <div class="brand">SL Office Supplies & Services<small>Accounting System V3</small></div>
@@ -734,6 +753,22 @@ function si(id,v){var e=document.getElementById(id);if(e)e.innerHTML=v;}
 function esc(s){if(s==null)return '';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function ea(s){if(s==null)return '';return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
 function fmt(n){return (parseFloat(n)||0).toFixed(2);}
+/* ── LOGIN ── */
+function doLogin(){
+  var u=document.getElementById('login-user').value.trim();
+  var p=document.getElementById('login-pass').value;
+  var err=document.getElementById('login-err');
+  if(u==='SL'&&p==='SL1234'){
+    var ol=document.getElementById('login-overlay');
+    ol.style.opacity='0';ol.style.transition='opacity .4s';
+    setTimeout(function(){ol.style.display='none';},400);
+  } else {
+    err.textContent='Invalid username or password.';
+    document.getElementById('login-pass').value='';
+    document.getElementById('login-pass').focus();
+  }
+}
+/* ─────── */
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2);}
 function today(){return new Date().toISOString().slice(0,10);}
 function proper(s){if(!s)return '';return String(s).toLowerCase().replace(/\b\w/g,function(c){return c.toUpperCase();});}
