@@ -2750,7 +2750,7 @@ function renderBankBook(){
   } else if(BB_TAB==='in'){
     var tot=0;
     html='<div style="overflow-x:auto"><table class="table table-sm table-hover"><thead><tr><th>Date</th><th>From</th><th>Ref</th><th class="num">Amount (RM)</th></tr></thead><tbody>';
-    crs.forEach(function(r){tot+=tn(r.amount);html+='<tr><td>'+esc(fmtDate(r.date))+'</td><td>'+esc(r.from)+'</td><td>'+esc(r.ref||'')+'</td><td class="num text-success">'+fmt(tn(r.amount))+'</td></tr>';});
+    crs.forEach(function(r){tot+=tn(r.amount);html+='<tr><td>'+esc(fmtDate(r.date))+'</td><td>'+esc(proper(r.from||''))+'</td><td>'+esc(r.ref||'')+'</td><td class="num text-success">'+fmt(tn(r.amount))+'</td></tr>';});
     html+='<tr class="fw-bold table-dark"><td colspan="3">Total</td><td class="num text-success">'+fmt(tot)+'</td></tr></tbody></table></div>';
   } else {
     var tot2=0;
@@ -2863,7 +2863,7 @@ function renderCashBook(){
   } else if(CB_TAB==='in'){
     var tot=0;
     html='<div style="overflow-x:auto"><table class="table table-sm table-hover"><thead><tr><th>Date</th><th>From</th><th>Ref</th><th class="num">Amount (RM)</th></tr></thead><tbody>';
-    crs.forEach(function(r){tot+=tn(r.amount);html+='<tr><td>'+esc(fmtDate(r.date))+'</td><td>'+esc(r.from)+'</td><td>'+esc(r.ref||'')+'</td><td class="num text-success">'+fmt(tn(r.amount))+'</td></tr>';});
+    crs.forEach(function(r){tot+=tn(r.amount);html+='<tr><td>'+esc(fmtDate(r.date))+'</td><td>'+esc(proper(r.from||''))+'</td><td>'+esc(r.ref||'')+'</td><td class="num text-success">'+fmt(tn(r.amount))+'</td></tr>';});
     html+='<tr class="fw-bold table-dark"><td colspan="3">Total</td><td class="num text-success">'+fmt(tot)+'</td></tr></tbody></table></div>';
   } else {
     var tot2=0;
