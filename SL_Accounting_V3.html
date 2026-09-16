@@ -2889,6 +2889,9 @@ function exportCashBookXLSX(){
    RESET
 ═══════════════════════════════════════════════════════ */
 function resetData(){
+  var pw=prompt('Enter password to access Reset:');
+  if(pw===null)return;
+  if(pw!=='SL1234'){alert('Wrong password.');return;}
   var choice=prompt('RESET OPTIONS:\n1. Clear ALL data (full reset)\n2. Clear transaction data only\nCancel\n\nType 1, 2 or leave blank to cancel:');
   if(!choice||!choice.trim())return;
   if(choice.trim()==='1'){
